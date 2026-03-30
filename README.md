@@ -46,7 +46,7 @@
 - [x] Phase 1: Foundation & Design - Tailwind/Framer Motion 接入与克莱因视觉底板。
 - [x] Phase 2: State & Auth - `localStorage` API Key 权限控制与前端拦截器。
 - [x] Phase 3: Main UI Shell - 双栏响应式导演控制台与多状态监视器搭建。
-- [ ] Phase 4: Core Service Layer - Gemini SDK 逻辑接通，打通生图/海报抓取/后期修图全链路。
+- [x] Phase 4: Core Service Layer - SiliconFlow SDXL 2.0 逻辑接通，打通图生图/海报抓取全链路。
 
 ---
 *Built with React 18 & Google Gemini API. Created in 2026.*

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hollywood Cut | Jazz & Western Edition</title>
     
-    <!-- 面向设计的字体系统 (Typography System) -->
+    <!-- 设计字体系统 (Typography System) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Playfair+Display:ital,wght@1,400..900&family=Rye&display=swap" rel="stylesheet">
@@ -19,7 +19,6 @@
     <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Tailwind 视觉系统配置 (Design System Config) -->
     <script>
         tailwind.config = {
             theme: {
@@ -41,7 +40,6 @@
         }
     </script>
     
-    <!-- 原生全局样式 (Global Styles) -->
     <style>
         body {
             background-color: #FAF9F6;
@@ -50,51 +48,32 @@
             overflow-x: hidden;
             min-height: 100vh;
         }
-
-        /* 影片字幕感斜体 */
-        .title-italic {
-            font-family: 'Playfair Display', serif;
-            font-style: italic;
-        }
-
-        /* 粗体克莱因蓝描边 */
+        .title-italic { font-family: 'Playfair Display', serif; font-style: italic; }
         .border-klein { border: 2px solid #002FA7; }
         .border-klein-thick { border: 4px solid #002FA7; }
-
-        /* 背景跃动小元素层 */
         .atmosphere-layer {
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0.1;
-            overflow: hidden;
+            position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.1; overflow: hidden;
         }
-
-        .floating {
-            position: absolute;
-            animation: float 8s ease-in-out infinite;
-        }
-
+        .floating { position: absolute; animation: float 8s ease-in-out infinite; }
         @keyframes float {
             0% { transform: translateY(0px) rotate(0deg); }
             50% { transform: translateY(-30px) rotate(10deg); }
             100% { transform: translateY(0px) rotate(0deg); }
         }
+        .folded-paper { position: relative; background: white; }
+        .folded-paper::after {
+            content: ''; position: absolute; top: 0; right: 0; width: 0; height: 0;
+            border-style: solid; border-width: 0 30px 30px 0;
+            border-color: transparent transparent #002FA7 transparent; pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <!-- 氛围装饰层 -->
     <div id="atmosphere" class="atmosphere-layer"></div>
-
-    <!-- React 挂载点 -->
     <div id="root" class="relative z-10 w-full min-h-screen flex flex-col"></div>
 
-    <!-- Babel 核心应用脚本 -->
     <script type="text/babel" data-presets="react">
-        // --- [依赖解构] ---
-        const { useState, useEffect, useRef } = React;
-        const fm = window.FramerMotion; // Safe fallback assignment
+        const { useState, useEffect, useRef, useMemo } = React;
 
         const Icon = ({ name, size = 24, className = "" }) => {
             const spanRef = useRef(null);
@@ -112,102 +91,79 @@
             return <span ref={spanRef} className={`inline-flex items-center justify-center ${className}`}></span>;
         };
 
-        // --- [组件：主应用容器] ---
         const App = () => {
-            // 阶段二：认证状态控制
-            const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+            const [apiKey, setApiKey] = useState(localStorage.getItem('siliconflow_api_key') || '');
             const [inputKey, setInputKey] = useState('');
             const [isAuth, setIsAuth] = useState(!!apiKey);
-
-            // 阶段三：主控制台状态管理
             const [image, setImage] = useState(null);
             const [movieName, setMovieName] = useState('');
             const [ratio, setRatio] = useState('16:9');
             const [dof, setDof] = useState('f/4');
             const [imagesCount, setImagesCount] = useState(1);
-            
-            // 阶段四预留：AI 交互状态
             const [isGenerating, setIsGenerating] = useState(false);
             const [results, setResults] = useState([]);
-            const [magicPrompt, setMagicPrompt] = useState('');
+            
+            const SELECTED_MODEL = 'Qwen/Qwen-Image-Edit-2509';
 
-            // --- [阶段四：核心逻辑 (Phase 4 AI Core)] ---
-            const PROMPT_TEMPLATE = `【人物与面容】
-核心人物： 以上传图片为唯一面部参考，100%精确重构该人物的面部骨骼结构、皮肤纹理、发型及神态...
-[${movieName || '经典电影'}] 主演： 呈现其于电影拍摄期间的样貌...
-互动状态： 两人身着各自的戏服，在电影拍摄间隙...
-
-【镜头与构图】
-镜头： 专业人像摄影机模式拍摄 (Professional Cinematic Portrait Mode)... [${dof}]
-构图： [${ratio}] 采用生活化、不拘谨的抓拍构图...
-
-【灯光与色彩】
-主光源： 完全遵循所选电影场景的环境光逻辑...
-色彩风格： 电影风格的色调...
-
-【服装与造型】
-上传人物着装： 保持不变...
-[${movieName || '经典电影'}] 主演着装： 符合剧中时代与角色...
-
-【动作与场景】
-核心动作： 电影拍摄被短暂打断...
-关键元素： 画面中需明确可见电影拍摄现场的痕迹（摄影机、灯光架、麦克风杆等）...
-
-【画面风格与细节】
-细节： 模拟柯达Vision3 500T电影胶片质感...
-画面氛围： 温暖、怀旧、充满人情味...
-
-【最终画面感受总结】
-一张超写实的照片，仿佛闯入了拍摄现场...`;
+            const PROMPT_FACTORY = useMemo(() => {
+                // 核心修改：明确描述双人合影场景
+                const baseSubject = `A high-quality group photo of the exact person from the original reference image standing and smiling next to the real ${movieName || 'superhero'} character in full costume`;
+                const action = `taking a break behind the scenes, both looking at the camera, friendly and candid atmosphere, off-camera moment`;
+                const environment = `on a professional Hollywood film set, movie trailers and lighting equipment in the background, cinematic fog, crew members in distance`;
+                const aesthetic = `Klein Blue Jazz Western color grading, deep midnight blue shadows vs sunset orange highlights, neo-noir lighting, high-contrast, preservation of original face`;
+                const technical = `Shot on Arri Alexa, 35mm wide-angle lens, beautiful Kodak Vision3 film grain, ${dof}, ${ratio} composition, 8k ultra-photorealistic, raw film look`;
+                return `${baseSubject}, ${action}. ${environment}. ${aesthetic}. ${technical}.`.replace(/\s+/g, " ");
+            }, [movieName, ratio, dof]);
 
             const handleAction = async () => {
-                if (!image) return alert('导演，请先上场人像参考卡 (Upload Target Image)');
-                if (!movieName) return alert('导演，请先指定电影剧组环境 (Enter Movie Name)');
-
+                if (!image) return alert('导演，请先上传人像参考卡 (Upload Target Image)');
+                if (!movieName) return alert('导演，请先指定电影名称 (Enter Movie Name)');
                 setIsGenerating(true);
                 setResults([]);
 
                 try {
-                    // API 切回真实的 Google Imagen 生图通道，而非文本对话模型
-                    console.log("🚀 发送指令至好莱坞片场 (Google Imagen API)...", { ratio, dof });
+                    const apiUrl = 'https://api.siliconflow.cn/v1/images/generations';
+                    
+                    const payload = {
+                        model: SELECTED_MODEL,
+                        prompt: PROMPT_FACTORY,
+                        n: imagesCount,
+                        seed: Math.floor(Math.random() * 10000000),
+                        num_inference_steps: 25,
+                        cfg: 3.0
+                    };
 
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+                    if (image) payload.image = image; // 传入您的参考图
                     
                     const response = await fetch(apiUrl, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            instances: [{ prompt: PROMPT_TEMPLATE }],
-                            parameters: { sampleCount: 1, aspectRatio: ratio === '16:9' ? '16:9' : ratio === '9:16' ? '9:16' : ratio === '3:4' ? '3:4' : '4:3' }
-                        })
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey.trim()}` },
+                        body: JSON.stringify(payload)
                     });
-
                     const data = await response.json();
-
                     if (!response.ok) {
-                        throw new Error(data.error?.message || `API Error: ${response.status}`);
+                        const msg = data.message || data.error?.message || `HTTP ${response.status}`;
+                        throw new Error(`[${response.status}] ${msg}`);
                     }
-
-                    if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
-                        const b64 = data.predictions[0].bytesBase64Encoded;
-                        setResults([{ url: `data:image/jpeg;base64,${b64}` }]);
-                    } else {
-                        throw new Error("Google Imagen API 返回了空画面 (可能触发了严格的安全审查拦截)。请尝试更换更保守的电影词汇。");
-                    }
+                    const imgs = data.images || data.data || [];
+                    if (imgs.length > 0) {
+                        setResults(imgs.map((img, idx) => ({ 
+                            url: img.url || `data:image/png;base64,${img.b64_json}`,
+                            id: `TAKE_${idx + 1}`,
+                            timecode: `02:14:35:${Math.floor(Math.random() * 24)}`,
+                            model: 'QWEN_EDIT_PRO'
+                        })));
+                    } else { throw new Error("API 返回成功但无图像数据"); }
                 } catch (error) {
-                    console.warn("Studio Error Caught:", error.message);
-                    alert("🎬 片场突发状况: " + error.message + "\n\n⚠️ 已自动为您展示片场测试照片 (Mockup) 以供流程预览。");
-                    setResults([{ url: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1024' }]);
-                } finally {
-                    setIsGenerating(false);
-                }
+                    alert("片场报错: " + error.message);
+                } finally { setIsGenerating(false); }
             };
 
-            // 绘制漂浮的 Jazz 背景饰物
             useEffect(() => {
                 const container = document.getElementById('atmosphere');
+                if (!container) return;
                 container.innerHTML = '';
-                const items = ['♪', '♫', '★', '☆', '✧', '●', '✦'];
+                const items = ['♩', '♪', '♫', '♬', '🎬', '🎞', '📽'];
                 for(let i=0; i<15; i++) {
                     const el = document.createElement('span');
                     el.className = 'floating';
@@ -221,224 +177,79 @@
                 }
             }, [isAuth]);
 
-            // 认证逻辑
             const handleAuth = () => {
                 if (inputKey.trim()) {
-                    localStorage.setItem('gemini_api_key', inputKey.trim());
+                    localStorage.setItem('siliconflow_api_key', inputKey.trim());
                     setApiKey(inputKey.trim());
                     setIsAuth(true);
                 }
             };
 
-            // 阶段二：如果没有认证，渲染登录拦截面板
             if (!isAuth) {
                 return (
                     <div className="flex-grow flex items-center justify-center p-6 bg-warm-paper">
-                        <div className="w-full max-w-sm border-klein-thick bg-white p-10 shadow-[16px_16px_0_rgba(0,47,167,0.1)] transition-transform hover:scale-[1.01]">
-                            {/* 设计规范：Clapperboard 顶端图标 + Playfair Title */}
+                        <div className="w-full max-w-sm border-klein-thick bg-white p-10 shadow-[16px_16px_0_rgba(0,47,167,0.1)]">
                             <div className="flex flex-col items-center gap-6 mb-10">
-                                <div className="w-20 h-20 rounded-full bg-klein-blue flex items-center justify-center ring-4 ring-sunset-orange ring-offset-4 ring-offset-warm-paper">
+                                <div className="w-20 h-20 rounded-full bg-klein-blue flex items-center justify-center ring-4 ring-sunset-orange">
                                     <Icon name="Clapperboard" className="text-white" size={32} />
                                 </div>
                                 <h1 className="text-4xl text-klein-blue title-italic uppercase tracking-widest text-center">Hollywood Cut</h1>
                             </div>
-                            
-                            {/* 认证表单 */}
                             <div className="flex flex-col gap-6">
-                                <input 
-                                    type="password" 
-                                    placeholder="输入 Gemini API Key" 
-                                    className="w-full border-klein p-4 text-center font-mono outline-none focus:border-sunset-orange focus:ring-1 focus:ring-sunset-orange transition-all placeholder:text-[#002FA7]/30 text-[#002FA7]"
-                                    value={inputKey}
-                                    onChange={(e) => setInputKey(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
-                                />
-                                <button 
-                                    onClick={handleAuth} 
-                                    className="w-full bg-klein-blue text-white py-4 font-bold uppercase tracking-[0.2em] hover:bg-sunset-orange transition-colors"
-                                >
-                                    进入电影片场
-                                </button>
+                                <input type="password" placeholder="输入 SiliconFlow API Key" className="w-full border-klein p-4 text-center font-mono outline-none focus:border-sunset-orange" value={inputKey} onChange={(e) => setInputKey(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAuth()} />
+                                <button onClick={handleAuth} className="w-full bg-klein-blue text-white py-4 font-bold uppercase tracking-[0.2em] hover:bg-sunset-orange transition-colors">进入电影片场</button>
                             </div>
                         </div>
                     </div>
                 );
             }
 
-            // 重置功能
-            const handleReset = () => {
-                localStorage.removeItem('gemini_api_key');
-                setIsAuth(false);
-                setApiKey('');
-            };
-
-            // 图片预览逻辑
-            const handleImageUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => setImage(ev.target.result);
-                    reader.readAsDataURL(file);
-                }
-            };
-
-            // 阶段三：主界面架构 (Main UI Shell)
             return (
                 <div className="flex-grow flex flex-col p-6 lg:p-12 gap-8 pb-20">
-                    
-                    {/* A. 头部 (Header) */}
                     <header className="flex justify-between items-end border-b-4 border-klein-blue pb-4">
                         <h1 className="text-6xl lg:text-8xl title-italic uppercase leading-none">Hollywood <span className="text-sunset-orange">Cut</span></h1>
-                        <button onClick={handleReset} className="hidden lg:flex items-center gap-2 px-5 py-2 border-klein text-xs font-bold uppercase tracking-widest hover:bg-sunset-orange hover:text-white transition-all">
-                            Reset Key
-                        </button>
+                        <button onClick={() => { localStorage.removeItem('siliconflow_api_key'); setApiKey(''); setIsAuth(false); }} className="hidden lg:flex px-5 py-2 border-klein text-xs font-bold uppercase tracking-widest hover:bg-sunset-orange hover:text-white">Reset Key</button>
                     </header>
-
                     <main className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                        
-                        {/* B. 左侧栏：导演控制台 */}
                         <div className="flex flex-col gap-8">
-                            
-                            {/* 1. 上传模块 */}
-                            <div className="bg-white border-klein p-6 relative group overflow-hidden shadow-sm hover:border-sunset-orange transition-colors">
-                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                            <div className="bg-white border-klein p-6 relative group overflow-hidden">
+                                <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => setImage(ev.target.result); reader.readAsDataURL(file); } }} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                                 <div className="border-2 border-dashed border-klein h-40 flex flex-col items-center justify-center p-2">
-                                    {image ? (
-                                        <img src={image} className="w-full h-full object-cover rounded-sm shadow-md" alt="Reference Face" />
-                                    ) : (
-                                        <>
-                                            <Icon name="Upload" className="text-klein-blue mb-3 group-hover:text-sunset-orange transition-colors" size={32} />
-                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-klein-blue">上传人像参考</p>
-                                        </>
-                                    )}
+                                    {image ? <img src={image} className="max-w-full max-h-full object-contain" /> : <><Icon name="Upload" className="text-klein-blue mb-3" size={32} /><p className="text-xs font-bold uppercase tracking-[0.2em] text-klein-blue">上传人像参考卡</p></>}
                                 </div>
                             </div>
-
-                            {/* 2. 场景设定 */}
                             <div className="bg-white border-klein p-8 flex flex-col gap-6">
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase block mb-2 text-saddle-brown">电影名称 (Movie Context)</label>
-                                    <input 
-                                        type="text" 
-                                        value={movieName} 
-                                        onChange={(e) => setMovieName(e.target.value)} 
-                                        placeholder="例如: Interstellar" 
-                                        className="w-full border-b-[3px] border-klein p-2 outline-none focus:border-sunset-orange text-2xl title-italic text-[#002FA7]" 
-                                    />
-                                </div>
+                                <input type="text" value={movieName} onChange={(e) => setMovieName(e.target.value)} placeholder="电影名称 (例如: Interstellar)" className="w-full border-b-[3px] border-klein p-2 outline-none text-2xl title-italic text-klein-blue" />
                                 <div className="grid grid-cols-2 gap-3">
-                                    {['9:16', '3:4', '4:3', '16:9'].map(r => (
-                                        <button 
-                                            key={r} 
-                                            onClick={() => setRatio(r)} 
-                                            className={`py-3 text-[10px] font-bold uppercase tracking-wider border-klein transition-colors ${ratio === r ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue hover:bg-klein-blue/5'}`}
-                                        >
-                                            {r === '9:16' ? '抖音 9:16' : r === '3:4' ? '小红书 3:4' : r === '4:3' ? 'B站 4:3' : '宽银幕 16:9'}
-                                        </button>
-                                    ))}
+                                    {['9:16', '3:4', '4:3', '16:9'].map(r => <button key={r} onClick={() => setRatio(r)} className={`py-3 text-[10px] font-bold uppercase border-klein ${ratio === r ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue'}`}>{r}</button>)}
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
-                                    {['f/1.2', 'f/4', 'f/11'].map(d => (
-                                        <button 
-                                            key={d} 
-                                            onClick={() => setDof(d)} 
-                                            className={`py-3 text-[10px] font-bold uppercase tracking-wider border-klein transition-colors ${dof === d ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue hover:bg-klein-blue/5'}`}
-                                        >
-                                            {d === 'f/1.2' ? '浅景深 f/1.2' : d === 'f/4' ? '标准 f/4' : '深景深 f/11'}
-                                        </button>
-                                    ))}
+                                    {['f/1.2', 'f/4', 'f/11'].map(d => <button key={d} onClick={() => setDof(d)} className={`py-3 text-[10px] font-bold uppercase border-klein ${dof === d ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue'}`}>{d}</button>)}
                                 </div>
                             </div>
-
-                            {/* 3. 导演指令 */}
-                            <div className="folded-paper border-klein p-6">
-                                <label className="text-xs font-mono font-bold uppercase block mb-3 text-saddle-brown">Director's Prompt</label>
-                                <textarea 
-                                    readOnly
-                                    value={PROMPT_TEMPLATE} 
-                                    className="w-full h-32 font-mono text-[10px] leading-relaxed text-[#002FA7]/60 bg-transparent resize-none outline-none" 
-                                />
-                            </div>
-
-                            {/* 4. Action 区域 */}
-                            <div className="flex gap-4 items-center">
+                            <div className="folded-paper border-klein p-6"><label className="text-xs font-mono font-bold uppercase block mb-3 text-saddle-brown">Director's Prompt</label><textarea readOnly value={PROMPT_FACTORY} className="w-full h-32 font-mono text-[10px] text-klein-blue/60 bg-transparent resize-none outline-none" /></div>
+                            <div className="flex gap-4">
                                 <div className="w-1/3 flex border-klein h-16">
-                                    {[1, 2].map(n => (
-                                        <button 
-                                            key={n} 
-                                            onClick={() => setImagesCount(n)}
-                                            className={`flex-1 font-mono font-bold text-lg ${imagesCount === n ? 'bg-klein-blue text-white' : 'bg-white text-klein-blue hover:bg-klein-blue/10'}`}
-                                        >
-                                            x{n}
-                                        </button>
-                                    ))}
+                                    {[1, 2].map(n => <button key={n} onClick={() => setImagesCount(n)} className={`flex-1 font-mono font-bold ${imagesCount === n ? 'bg-klein-blue text-white' : 'bg-white text-klein-blue'}`}>x{n}</button>)}
                                 </div>
-                                <button onClick={handleAction} disabled={isGenerating} className={`flex-1 h-16 text-white font-bold text-3xl title-italic uppercase tracking-[0.3em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-transform shadow-[12px_12px_0_rgba(0,47,167,0.1)] ${isGenerating ? 'bg-gray-400 cursor-not-allowed' : 'bg-sunset-orange'}`}>
-                                    {isGenerating ? (
-                                        <>
-                                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                            PROCESSING...
-                                        </>
-                                    ) : (
-                                        <><Icon name="Star" size={28} /> ACTION !</>
-                                    )}
+                                <button onClick={handleAction} disabled={isGenerating} className={`flex-1 h-16 text-white font-bold text-3xl title-italic uppercase tracking-[0.3em] flex items-center justify-center gap-4 ${isGenerating ? 'bg-gray-400' : 'bg-sunset-orange shadow-[12px_12px_0_rgba(0,47,167,0.1)]'}`}>
+                                    {isGenerating ? 'PROCESSING...' : <><Icon name="Star" size={28} /> ACTION !</>}
                                 </button>
                             </div>
                         </div>
-
-                        {/* C. 右侧栏：监视器 */}
-                        <div className="flex flex-col gap-8">
-                            
-                            {/* 1. 主显示区 */}
-                            <div className="bg-white border-klein-thick p-3 shadow-[20px_20px_0_rgba(0,47,167,0.08)]">
-                                <div className="border-2 border-dashed border-klein w-full aspect-[16/10] bg-warm-paper flex flex-col items-center justify-center relative overflow-hidden group">
-                                    {isGenerating ? (
-                                        <div className="flex flex-col items-center gap-6 z-20">
-                                            <div className="relative w-24 h-24">
-                                                <div className="absolute inset-0 border-4 border-sunset-orange border-t-transparent rounded-full animate-spin"></div>
-                                                <div className="absolute inset-4 border-4 border-klein-blue rounded-full animate-ping opacity-30"></div>
-                                            </div>
-                                            <span className="font-western text-2xl uppercase tracking-[0.4em] text-sunset-orange animate-pulse">DEVELOPING...</span>
-                                        </div>
-                                    ) : results.length > 0 ? (
-                                        <div className="relative w-full h-full animate-in fade-in zoom-in duration-500">
-                                            <img src={results[0].url} className="w-full h-full object-contain" alt="Generated BTShot" />
-                                            <a 
-                                                href={results[0].url} 
-                                                download="hollywood_cut.png"
-                                                className="absolute bottom-4 right-4 bg-sunset-orange text-white p-4 rounded-full shadow-xl hover:scale-110 active:scale-90 transition-transform z-30"
-                                            >
-                                                <Icon name="Download" size={24} />
-                                            </a>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center font-western text-klein-blue/10 select-none">
-                                            <p className="text-7xl lg:text-9xl tracking-tight">NO SIGNAL</p>
-                                            <p className="font-mono text-xs uppercase tracking-[0.5em] text-saddle-brown/40 mt-6 group-hover:text-klein-blue transition-colors">Standby for Action</p>
-                                        </div>
-                                    )}
-                                </div>
+                        <div className="bg-white border-klein-thick p-3 shadow-[20px_20px_0_rgba(0,47,167,0.08)]">
+                            <div className="border-2 border-dashed border-klein w-full aspect-[16/10] bg-warm-paper flex flex-col items-center justify-center relative overflow-hidden">
+                                {isGenerating ? <div className="animate-pulse text-2xl font-western text-sunset-orange">DEVELOPING...</div> : results.length > 0 ? <div className="w-full h-full p-2 overflow-y-auto"><img src={results[0].url} className="w-full h-full object-contain" /></div> : <div className="text-7xl lg:text-9xl font-western text-klein-blue/10">NO SIGNAL</div>}
                             </div>
-
                         </div>
                     </main>
-
-                    {/* D. 页脚 */}
-                    <footer className="fixed bottom-0 left-0 right-0 h-10 bg-klein-blue text-warm-paper flex items-center justify-between px-6 text-[10px] font-mono tracking-[0.2em] font-bold uppercase z-50 shadow-2xl">
-                        <div>★ Hollywood Cut</div>
-                        <div className="hidden md:block">Jazz & Western Edition</div>
-                        <div className="text-emerald-500 animate-pulse">AI Connected</div>
-                    </footer>
+                    <footer className="fixed bottom-0 left-0 right-0 h-10 bg-klein-blue text-warm-paper flex items-center justify-between px-6 text-[10px] font-mono font-bold uppercase z-50"><div>★ Hollywood Cut</div><div className="animate-pulse">{isGenerating ? 'Processing...' : 'AI Connected'}</div></footer>
                 </div>
             );
-
         };
 
-        // 挂载 React
-        const rootNode = document.getElementById('root');
-        const root = ReactDOM.createRoot(rootNode);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-
     </script>
 </body>
 </html>
