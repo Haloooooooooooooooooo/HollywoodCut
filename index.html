@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hollywood Cut | Jazz & Western Edition</title>
+    
+    <!-- 面向设计的字体系统 (Typography System) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Playfair+Display:ital,wght@1,400..900&family=Rye&display=swap" rel="stylesheet">
+    
+    <!-- 核心运行库 (Core Libraries via CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 动画与图标 (UI Tools) -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Tailwind 视觉系统配置 (Design System Config) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'klein-blue': '#002FA7',
+                        'sunset-orange': '#FF4500',
+                        'warm-paper': '#FAF9F6',
+                        'saddle-brown': '#8B4513',
+                    },
+                    fontFamily: {
+                        cinematic: ['"Playfair Display"', 'serif'],
+                        western: ['Rye', 'cursive'],
+                        ui: ['Inter', 'sans-serif'],
+                        mono: ['monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <!-- 原生全局样式 (Global Styles) -->
+    <style>
+        body {
+            background-color: #FAF9F6;
+            color: #002FA7;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* 影片字幕感斜体 */
+        .title-italic {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+        }
+
+        /* 粗体克莱因蓝描边 */
+        .border-klein { border: 2px solid #002FA7; }
+        .border-klein-thick { border: 4px solid #002FA7; }
+
+        /* 背景跃动小元素层 */
+        .atmosphere-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.1;
+            overflow: hidden;
+        }
+
+        .floating {
+            position: absolute;
+            animation: float 8s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-30px) rotate(10deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- 氛围装饰层 -->
+    <div id="atmosphere" class="atmosphere-layer"></div>
+
+    <!-- React 挂载点 -->
+    <div id="root" class="relative z-10 w-full min-h-screen flex flex-col"></div>
+
+    <!-- Babel 核心应用脚本 -->
+    <script type="text/babel" data-presets="react">
+        // --- [依赖解构] ---
+        const { useState, useEffect, useRef } = React;
+        const fm = window.FramerMotion; // Safe fallback assignment
+
+        // --- [组件：图标包装器] ---
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    window.lucide.createIcons({
+                        icons: { [name]: window.lucide[name] },
+                        nameAttr: 'data-lucide',
+                        attrs: { class: className, width: size, height: size }
+                    });
+                }
+            }, [name, className, size]);
+            return <i ref={iconRef} data-lucide={name}></i>;
+        };
+
+        // --- [组件：主应用容器] ---
+        const App = () => {
+            // 阶段二：认证状态控制
+            const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+            const [inputKey, setInputKey] = useState('');
+            const [isAuth, setIsAuth] = useState(!!apiKey);
+
+            // 阶段三：主控制台状态管理
+            const [image, setImage] = useState(null);
+            const [movieName, setMovieName] = useState('');
+            const [ratio, setRatio] = useState('16:9');
+            const [dof, setDof] = useState('f/4');
+            const [imagesCount, setImagesCount] = useState(1);
+            
+            // 阶段四预留：AI 交互状态
+            const [finalPrompt, setFinalPrompt] = useState('等待配置...');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [results, setResults] = useState([]);
+            const [magicPrompt, setMagicPrompt] = useState('');
+
+            // 绘制漂浮的 Jazz 背景饰物
+            useEffect(() => {
+                const container = document.getElementById('atmosphere');
+                container.innerHTML = '';
+                const items = ['♪', '♫', '★', '☆', '✧', '●', '✦'];
+                for(let i=0; i<15; i++) {
+                    const el = document.createElement('span');
+                    el.className = 'floating';
+                    el.innerText = items[Math.floor(Math.random() * items.length)];
+                    el.style.left = Math.random() * 95 + '%';
+                    el.style.top = Math.random() * 95 + '%';
+                    el.style.fontSize = (Math.random() * 30 + 20) + 'px';
+                    el.style.color = Math.random() > 0.5 ? '#002FA7' : '#FF4500';
+                    el.style.animationDelay = (Math.random() * 5) + 's';
+                    container.appendChild(el);
+                }
+            }, [isAuth]);
+
+            // 认证逻辑
+            const handleAuth = () => {
+                if (inputKey.trim()) {
+                    localStorage.setItem('gemini_api_key', inputKey.trim());
+                    setApiKey(inputKey.trim());
+                    setIsAuth(true);
+                }
+            };
+
+            // 阶段二：如果没有认证，渲染登录拦截面板
+            if (!isAuth) {
+                return (
+                    <div className="flex-grow flex items-center justify-center p-6 bg-warm-paper">
+                        <div className="w-full max-w-sm border-klein-thick bg-white p-10 shadow-[16px_16px_0_rgba(0,47,167,0.1)] transition-transform hover:scale-[1.01]">
+                            {/* 设计规范：Clapperboard 顶端图标 + Playfair Title */}
+                            <div className="flex flex-col items-center gap-6 mb-10">
+                                <div className="w-20 h-20 rounded-full bg-klein-blue flex items-center justify-center ring-4 ring-sunset-orange ring-offset-4 ring-offset-warm-paper">
+                                    <Icon name="Clapperboard" className="text-white" size={32} />
+                                </div>
+                                <h1 className="text-4xl text-klein-blue title-italic uppercase tracking-widest text-center">Hollywood Cut</h1>
+                            </div>
+                            
+                            {/* 认证表单 */}
+                            <div className="flex flex-col gap-6">
+                                <input 
+                                    type="password" 
+                                    placeholder="输入 Gemini API Key" 
+                                    className="w-full border-klein p-4 text-center font-mono outline-none focus:border-sunset-orange focus:ring-1 focus:ring-sunset-orange transition-all placeholder:text-[#002FA7]/30 text-[#002FA7]"
+                                    value={inputKey}
+                                    onChange={(e) => setInputKey(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
+                                />
+                                <button 
+                                    onClick={handleAuth} 
+                                    className="w-full bg-klein-blue text-white py-4 font-bold uppercase tracking-[0.2em] hover:bg-sunset-orange transition-colors"
+                                >
+                                    进入电影片场
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 重置功能
+            const handleReset = () => {
+                localStorage.removeItem('gemini_api_key');
+                setIsAuth(false);
+                setApiKey('');
+            };
+
+            // 图片预览逻辑
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setImage(ev.target.result);
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            // 阶段三：主界面架构 (Main UI Shell)
+            return (
+                <div className="flex-grow flex flex-col p-6 lg:p-12 gap-8 pb-20">
+                    
+                    {/* A. 头部 (Header) */}
+                    <header className="flex justify-between items-end border-b-4 border-klein-blue pb-4">
+                        <h1 className="text-6xl lg:text-8xl title-italic uppercase leading-none">Hollywood <span className="text-sunset-orange">Cut</span></h1>
+                        <button onClick={handleReset} className="hidden lg:flex items-center gap-2 px-5 py-2 border-klein text-xs font-bold uppercase tracking-widest hover:bg-sunset-orange hover:text-white transition-all">
+                            Reset Key
+                        </button>
+                    </header>
+
+                    <main className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        
+                        {/* B. 左侧栏：导演控制台 */}
+                        <div className="flex flex-col gap-8">
+                            
+                            {/* 1. 上传模块 */}
+                            <div className="bg-white border-klein p-6 relative group overflow-hidden shadow-sm hover:border-sunset-orange transition-colors">
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                                <div className="border-2 border-dashed border-klein h-40 flex flex-col items-center justify-center p-2">
+                                    {image ? (
+                                        <img src={image} className="w-full h-full object-cover rounded-sm shadow-md" alt="Reference Face" />
+                                    ) : (
+                                        <>
+                                            <Icon name="Upload" className="text-klein-blue mb-3 group-hover:text-sunset-orange transition-colors" size={32} />
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-klein-blue">上传人像参考</p>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 2. 场景设定 */}
+                            <div className="bg-white border-klein p-8 flex flex-col gap-6">
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase block mb-2 text-saddle-brown">电影名称 (Movie Context)</label>
+                                    <input 
+                                        type="text" 
+                                        value={movieName} 
+                                        onChange={(e) => setMovieName(e.target.value)} 
+                                        placeholder="例如: Interstellar" 
+                                        className="w-full border-b-[3px] border-klein p-2 outline-none focus:border-sunset-orange text-2xl title-italic text-[#002FA7]" 
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['9:16', '3:4', '4:3', '16:9'].map(r => (
+                                        <button 
+                                            key={r} 
+                                            onClick={() => setRatio(r)} 
+                                            className={`py-3 text-[10px] font-bold uppercase tracking-wider border-klein transition-colors ${ratio === r ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue hover:bg-klein-blue/5'}`}
+                                        >
+                                            {r === '9:16' ? '抖音 9:16' : r === '3:4' ? '小红书 3:4' : r === '4:3' ? 'B站 4:3' : '宽银幕 16:9'}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {['f/1.2', 'f/4', 'f/11'].map(d => (
+                                        <button 
+                                            key={d} 
+                                            onClick={() => setDof(d)} 
+                                            className={`py-3 text-[10px] font-bold uppercase tracking-wider border-klein transition-colors ${dof === d ? 'bg-sunset-orange border-sunset-orange text-white' : 'text-klein-blue hover:bg-klein-blue/5'}`}
+                                        >
+                                            {d === 'f/1.2' ? '浅景深 f/1.2' : d === 'f/4' ? '标准 f/4' : '深景深 f/11'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 3. 导演指令 */}
+                            <div className="folded-paper border-klein p-6">
+                                <label className="text-xs font-mono font-bold uppercase block mb-3 text-saddle-brown">Director's Prompt</label>
+                                <textarea 
+                                    readOnly
+                                    value="[Phase 4 注入：等待根据参数生成 PRD 模板提示词...]" 
+                                    className="w-full h-32 font-mono text-[10px] leading-relaxed text-black/60 bg-transparent resize-none outline-none" 
+                                />
+                            </div>
+
+                            {/* 4. Action 区域 */}
+                            <div className="flex gap-4 items-center">
+                                <div className="w-1/3 flex border-klein h-16">
+                                    {[1, 2].map(n => (
+                                        <button 
+                                            key={n} 
+                                            onClick={() => setImagesCount(n)}
+                                            className={`flex-1 font-mono font-bold text-lg ${imagesCount === n ? 'bg-klein-blue text-white' : 'bg-white text-klein-blue hover:bg-klein-blue/10'}`}
+                                        >
+                                            x{n}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button className="flex-1 h-16 bg-sunset-orange text-white font-bold text-3xl title-italic uppercase tracking-[0.3em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-transform shadow-[12px_12px_0_rgba(0,47,167,0.1)]">
+                                    <Icon name="Star" size={28} /> Action !
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* C. 右侧栏：监视器 */}
+                        <div className="flex flex-col gap-8">
+                            
+                            {/* 1. 主显示区 */}
+                            <div className="bg-white border-klein-thick p-3 shadow-[20px_20px_0_rgba(0,47,167,0.08)]">
+                                <div className="border-2 border-dashed border-klein w-full aspect-[16/10] bg-warm-paper flex flex-col items-center justify-center relative overflow-hidden group">
+                                    {/* 空状态占位 */}
+                                    <div className="text-center font-western text-klein-blue/10 select-none">
+                                        <p className="text-7xl lg:text-9xl tracking-tight">NO SIGNAL</p>
+                                        <p className="font-mono text-xs uppercase tracking-[0.5em] text-saddle-brown/40 mt-6 group-hover:text-klein-blue transition-colors">Standby for Action</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </main>
+
+                    {/* D. 页脚 */}
+                    <footer className="fixed bottom-0 left-0 right-0 h-10 bg-klein-blue text-warm-paper flex items-center justify-between px-6 text-[10px] font-mono tracking-[0.2em] font-bold uppercase z-50 shadow-2xl">
+                        <div>★ Hollywood Cut</div>
+                        <div className="hidden md:block">Jazz & Western Edition</div>
+                        <div className="text-sunset-orange animate-pulse">Wait for Phase 4</div>
+                    </footer>
+                </div>
+            );
+
+        };
+
+        // 挂载 React
+        const rootNode = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootNode);
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
