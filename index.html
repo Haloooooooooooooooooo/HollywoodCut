@@ -96,19 +96,20 @@
         const { useState, useEffect, useRef } = React;
         const fm = window.FramerMotion; // Safe fallback assignment
 
-        // --- [组件：图标包装器] ---
         const Icon = ({ name, size = 24, className = "" }) => {
-            const iconRef = useRef(null);
+            const spanRef = useRef(null);
             useEffect(() => {
-                if (window.lucide && iconRef.current) {
+                if (window.lucide && spanRef.current) {
+                    spanRef.current.innerHTML = `<i data-lucide="${name}"></i>`;
                     window.lucide.createIcons({
                         icons: { [name]: window.lucide[name] },
+                        root: spanRef.current,
                         nameAttr: 'data-lucide',
                         attrs: { class: className, width: size, height: size }
                     });
                 }
             }, [name, className, size]);
-            return <i ref={iconRef} data-lucide={name}></i>;
+            return <span ref={spanRef} className={`inline-flex items-center justify-center ${className}`}></span>;
         };
 
         // --- [组件：主应用容器] ---
@@ -126,10 +127,81 @@
             const [imagesCount, setImagesCount] = useState(1);
             
             // 阶段四预留：AI 交互状态
-            const [finalPrompt, setFinalPrompt] = useState('等待配置...');
             const [isGenerating, setIsGenerating] = useState(false);
             const [results, setResults] = useState([]);
             const [magicPrompt, setMagicPrompt] = useState('');
+
+            // --- [阶段四：核心逻辑 (Phase 4 AI Core)] ---
+            const PROMPT_TEMPLATE = `【人物与面容】
+核心人物： 以上传图片为唯一面部参考，100%精确重构该人物的面部骨骼结构、皮肤纹理、发型及神态...
+[${movieName || '经典电影'}] 主演： 呈现其于电影拍摄期间的样貌...
+互动状态： 两人身着各自的戏服，在电影拍摄间隙...
+
+【镜头与构图】
+镜头： 专业人像摄影机模式拍摄 (Professional Cinematic Portrait Mode)... [${dof}]
+构图： [${ratio}] 采用生活化、不拘谨的抓拍构图...
+
+【灯光与色彩】
+主光源： 完全遵循所选电影场景的环境光逻辑...
+色彩风格： 电影风格的色调...
+
+【服装与造型】
+上传人物着装： 保持不变...
+[${movieName || '经典电影'}] 主演着装： 符合剧中时代与角色...
+
+【动作与场景】
+核心动作： 电影拍摄被短暂打断...
+关键元素： 画面中需明确可见电影拍摄现场的痕迹（摄影机、灯光架、麦克风杆等）...
+
+【画面风格与细节】
+细节： 模拟柯达Vision3 500T电影胶片质感...
+画面氛围： 温暖、怀旧、充满人情味...
+
+【最终画面感受总结】
+一张超写实的照片，仿佛闯入了拍摄现场...`;
+
+            const handleAction = async () => {
+                if (!image) return alert('导演，请先上场人像参考卡 (Upload Target Image)');
+                if (!movieName) return alert('导演，请先指定电影剧组环境 (Enter Movie Name)');
+
+                setIsGenerating(true);
+                setResults([]);
+
+                try {
+                    // API 切回真实的 Google Imagen 生图通道，而非文本对话模型
+                    console.log("🚀 发送指令至好莱坞片场 (Google Imagen API)...", { ratio, dof });
+
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            instances: [{ prompt: PROMPT_TEMPLATE }],
+                            parameters: { sampleCount: 1, aspectRatio: ratio === '16:9' ? '16:9' : ratio === '9:16' ? '9:16' : ratio === '3:4' ? '3:4' : '4:3' }
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error?.message || `API Error: ${response.status}`);
+                    }
+
+                    if (data.predictions && data.predictions[0] && data.predictions[0].bytesBase64Encoded) {
+                        const b64 = data.predictions[0].bytesBase64Encoded;
+                        setResults([{ url: `data:image/jpeg;base64,${b64}` }]);
+                    } else {
+                        throw new Error("Google Imagen API 返回了空画面 (可能触发了严格的安全审查拦截)。请尝试更换更保守的电影词汇。");
+                    }
+                } catch (error) {
+                    console.warn("Studio Error Caught:", error.message);
+                    alert("🎬 片场突发状况: " + error.message + "\n\n⚠️ 已自动为您展示片场测试照片 (Mockup) 以供流程预览。");
+                    setResults([{ url: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1024' }]);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
 
             // 绘制漂浮的 Jazz 背景饰物
             useEffect(() => {
@@ -283,8 +355,8 @@
                                 <label className="text-xs font-mono font-bold uppercase block mb-3 text-saddle-brown">Director's Prompt</label>
                                 <textarea 
                                     readOnly
-                                    value="[Phase 4 注入：等待根据参数生成 PRD 模板提示词...]" 
-                                    className="w-full h-32 font-mono text-[10px] leading-relaxed text-black/60 bg-transparent resize-none outline-none" 
+                                    value={PROMPT_TEMPLATE} 
+                                    className="w-full h-32 font-mono text-[10px] leading-relaxed text-[#002FA7]/60 bg-transparent resize-none outline-none" 
                                 />
                             </div>
 
@@ -301,8 +373,15 @@
                                         </button>
                                     ))}
                                 </div>
-                                <button className="flex-1 h-16 bg-sunset-orange text-white font-bold text-3xl title-italic uppercase tracking-[0.3em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-transform shadow-[12px_12px_0_rgba(0,47,167,0.1)]">
-                                    <Icon name="Star" size={28} /> Action !
+                                <button onClick={handleAction} disabled={isGenerating} className={`flex-1 h-16 text-white font-bold text-3xl title-italic uppercase tracking-[0.3em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-transform shadow-[12px_12px_0_rgba(0,47,167,0.1)] ${isGenerating ? 'bg-gray-400 cursor-not-allowed' : 'bg-sunset-orange'}`}>
+                                    {isGenerating ? (
+                                        <>
+                                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                            PROCESSING...
+                                        </>
+                                    ) : (
+                                        <><Icon name="Star" size={28} /> ACTION !</>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -313,11 +392,31 @@
                             {/* 1. 主显示区 */}
                             <div className="bg-white border-klein-thick p-3 shadow-[20px_20px_0_rgba(0,47,167,0.08)]">
                                 <div className="border-2 border-dashed border-klein w-full aspect-[16/10] bg-warm-paper flex flex-col items-center justify-center relative overflow-hidden group">
-                                    {/* 空状态占位 */}
-                                    <div className="text-center font-western text-klein-blue/10 select-none">
-                                        <p className="text-7xl lg:text-9xl tracking-tight">NO SIGNAL</p>
-                                        <p className="font-mono text-xs uppercase tracking-[0.5em] text-saddle-brown/40 mt-6 group-hover:text-klein-blue transition-colors">Standby for Action</p>
-                                    </div>
+                                    {isGenerating ? (
+                                        <div className="flex flex-col items-center gap-6 z-20">
+                                            <div className="relative w-24 h-24">
+                                                <div className="absolute inset-0 border-4 border-sunset-orange border-t-transparent rounded-full animate-spin"></div>
+                                                <div className="absolute inset-4 border-4 border-klein-blue rounded-full animate-ping opacity-30"></div>
+                                            </div>
+                                            <span className="font-western text-2xl uppercase tracking-[0.4em] text-sunset-orange animate-pulse">DEVELOPING...</span>
+                                        </div>
+                                    ) : results.length > 0 ? (
+                                        <div className="relative w-full h-full animate-in fade-in zoom-in duration-500">
+                                            <img src={results[0].url} className="w-full h-full object-contain" alt="Generated BTShot" />
+                                            <a 
+                                                href={results[0].url} 
+                                                download="hollywood_cut.png"
+                                                className="absolute bottom-4 right-4 bg-sunset-orange text-white p-4 rounded-full shadow-xl hover:scale-110 active:scale-90 transition-transform z-30"
+                                            >
+                                                <Icon name="Download" size={24} />
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center font-western text-klein-blue/10 select-none">
+                                            <p className="text-7xl lg:text-9xl tracking-tight">NO SIGNAL</p>
+                                            <p className="font-mono text-xs uppercase tracking-[0.5em] text-saddle-brown/40 mt-6 group-hover:text-klein-blue transition-colors">Standby for Action</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -328,7 +427,7 @@
                     <footer className="fixed bottom-0 left-0 right-0 h-10 bg-klein-blue text-warm-paper flex items-center justify-between px-6 text-[10px] font-mono tracking-[0.2em] font-bold uppercase z-50 shadow-2xl">
                         <div>★ Hollywood Cut</div>
                         <div className="hidden md:block">Jazz & Western Edition</div>
-                        <div className="text-sunset-orange animate-pulse">Wait for Phase 4</div>
+                        <div className="text-emerald-500 animate-pulse">AI Connected</div>
                     </footer>
                 </div>
             );
